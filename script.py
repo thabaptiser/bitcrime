@@ -4,127 +4,69 @@ from plotly.graph_objs import Scatter
 import time
 from datetime import datetime
 from datetime import timedelta
+from datetime import date
+from dateutil import rrule
 import urllib2
 import json
+import uuid
 
 conn = sqlite3.connect('/data/projects/08303-crime/bitcoin-abe-master/abe.sqlite')
-trans_val = float(raw_input("Transaction value(USD): "))
-trans_fuzz = float(raw_input("Transaction value fuzz(bitcoin): "))
-transaction_time = raw_input("Date of start: ")
-transaction_time = datetime.strptime(transaction_time, '%m-%d-%Y')
-print('http://api.coindesk.com/v1/bpi/historical/close.json?start={start}&end={start}'
-      .format(start=transaction_time.strftime("%Y-%m-%d")))
-response =  urllib2.urlopen('http://api.coindesk.com/v1/bpi/historical/close.json?start={start}&end={start}'
-                            .format(start=transaction_time.strftime("%Y-%m-%d")))
-html = response.read()
-values = json.loads(html)
-trans_val = trans_val/values['bpi'][transaction_time.strftime("%Y-%m-%d")]
-time_fuzz1 = int(raw_input("Days to fuzz 1: "))
-time_fuzz2 = int(raw_input("Days to fuzz 2: "))
-time_fuzz3 = int(raw_input("Days to fuzz 3: "))
+conn = sqlite3.connect('/home/bvauthey/bitcrime/abe.sqlite')
+req_string = 'http://api.coindesk.com/v1/bpi/historical/close.json?start={start}&end={start}'
 
 c = conn.cursor()
 
-first_res = []
-second_res = []
-third_res = []
 
-bottom_axis = []
+start_date = date(2010, 7, 18)
+end_date = date(2016, 1, 1)
+date_list = []
+money_list = []
+all_data = []
+created_money_list = False
+for day in rrule.rrule(rrule.WEEKLY, dtstart=start_date, until=end_date):
+    date_list.append(day)
+    week_row = []
+    for i in range(0,101):
+        if not created_money_list:
+            money_list.append(i*100)
+        money_start = i*100
+        money_end = i*100+99
+        print(req_string.format(start=day.strftime("%Y-%m-%d"), end=day.strftime("%Y-%m-%d")))
+        response =  urllib2.urlopen(req_string.format(start=day.strftime("%Y-%m-%d"), end=day.strftime("%Y-%m-%d")))
+        html = response.read()
+        values = json.loads(html)
 
-for i in range(0,5):
-  bottom_axis.append(i*trans_fuzz/5)
-  t0 = transaction_time
-
-  t1 = transaction_time + timedelta(days=time_fuzz1)
-  v0 = 100000000*(trans_val - i*trans_fuzz/5)
-  v1 = 100000000*(trans_val + i*trans_fuzz/5)
-
-  t0 = time.mktime(t0.timetuple())
-  t1 = time.mktime(t1.timetuple())
-
-  print("trying first query")
-  QUERY = "SELECT COUNT(*) FROM txout_detail2 WHERE block_nTime >= {t0} AND block_nTime <= {t1} AND txout_value >= {v0} AND txout_value <= {v1} LIMIT 100;".format(v0=v0, v1=v1, t0=t0, t1=t1)
-  print(QUERY);
-  for row in c.execute(QUERY):
-    print(row)
-    first_res.append( row[0])
+        BTCUSD = values['bpi'][day.strftime("%Y-%m-%d")]
 
 
+        t0 = time.mktime(day.timetuple())
+        t1 = time.mktime((day + timedelta(days=7)).timetuple())
+        QUERY = """SELECT COUNT(*) FROM txout_detail2 WHERE block_nTime >= {t0}
+        AND block_nTime <= {t1} AND txout_value >= {v0}
+        AND txout_value <= {v1};""".format(v0=100000000*money_start/BTCUSD, v1=100000000*money_end/BTCUSD, t0=t0, t1=t1)
+        print(QUERY)
+        for row in c.execute(QUERY):
+            week_row.append(row[0])
+            print(row)
+    with open('bitcrime_results' + uuid.uuid4()) as f:
+        f.write(','.join(week_row))
+	f.write('\n')
+    created_money_list = True
+    all_data.append(week_row)
 
-  t0 = transaction_time
-
-  t1 = transaction_time + timedelta(days=time_fuzz2)
-  print('http://api.coindesk.com/v1/bpi/historical/close.json?start={start}&end={start}'.format(start=t0.strftime("%Y-%m-%d")))
-  response =  urllib2.urlopen('http://api.coindesk.com/v1/bpi/historical/close.json?start={start}&end={start}'.format(start=t0.strftime("%Y-%m-%d")))
-  html = response.read()
-  values = json.loads(html)
-  v0 = 100000000*(trans_val - i*trans_fuzz/5)
-  v1 = 100000000*(trans_val + i*trans_fuzz/5)
-  t0 = time.mktime(t0.timetuple())
-  t1 = time.mktime(t1.timetuple())
-  print("trying second query")
-  QUERY = "SELECT COUNT(*) FROM txout_detail2 WHERE block_nTime >= {t0} AND block_nTime <= {t1} AND txout_value >= {v0} AND txout_value <= {v1} LIMIT 100;".format(v0=v0, v1=v1, t0=t0, t1=t1)
-  for row in c.execute(QUERY):
-    print(row)
-    second_res.append( row[0])
-
+z = all_data
+x = date_list
+y = money_list
 
 
 
-  t0 = transaction_time
+data = [go.Heatmap(z=z,x=x,y=y,colorscale='Viridis',)]
 
-  t1 = transaction_time + timedelta(days=time_fuzz3)
-  print('http://api.coindesk.com/v1/bpi/historical/close.json?start={start}&end={start}'.format(start=t0.strftime("%Y-%m-%d")))
-  response =  urllib2.urlopen('http://api.coindesk.com/v1/bpi/historical/close.json?start={start}&end={start}'.format(start=t0.strftime("%Y-%m-%d")))
-  html = response.read()
-  values = json.loads(html)
-  v0 = 100000000*(trans_val - i*trans_fuzz/5)
-  v1 = 100000000*(trans_val + i*trans_fuzz/5)
-
-  t0 = time.mktime(t0.timetuple())
-  t1 = time.mktime(t1.timetuple())
-  print("trying third query")
-  QUERY = "SELECT COUNT(*) FROM txout_detail2 WHERE block_nTime >= {t0} AND block_nTime <= {t1} AND txout_value >= {v0} AND txout_value <= {v1} LIMIT 100;".format(v0=v0, v1=v1, t0=t0, t1=t1)
-  for row in c.execute(QUERY):
-    print(row)
-    third_res.append( row[0])
-
-
-trace0 = Scatter(
-    x = bottom_axis,
-    y = first_res,
-    name = 'Tf = {t1}'.format(t1=time_fuzz1),
-    line = dict(
-        color = ('rgb(205, 12, 24)'),
-        width = 4)
-)
-trace1 = Scatter(
-    x = bottom_axis,
-    y = second_res,
-    name = 'Tf = {t2}'.format(t2=time_fuzz2),
-    line = dict(
-        color = ('rgb(24, 12, 205)'),
-        width = 4)
-)
-trace2 = Scatter(
-    x = bottom_axis,
-    y = third_res,
-    name = 'Tf = {t3}'.format(t3=time_fuzz3),
-    line = dict(
-        color = ('rgb(12, 205, 24)'),
-        width = 4)
+layout = go.Layout(
+    title='Anonymity set per week and transaction USD amount',
+    xaxis = dict(ticks='', nticks=36),
+    yaxis = dict(ticks='' )
 )
 
-data = [trace0, trace1, trace2]
-
-# Edit the layout
-layout = dict(title = 'Hits vs Bitcoin fuzz given time fuzzes',
-              xaxis = dict(title = 'Bitcoin value fuzz'),
-              yaxis = dict(title = 'Number of hits'),
-              )
-
-fig = dict(data=data, layout=layout)
-plotly.offline.plot(fig, filename='styled-line.html')
-
-#for row in c.execute(QUERY):
-#  print(row)
+fig = go.Figure(data=data, layout=layout)
+py.iplot(fig, filename='datetime-heatmap')
