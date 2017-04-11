@@ -10,8 +10,9 @@ import urllib2
 import json
 import uuid
 
-conn = sqlite3.connect('/data/projects/08303-crime/bitcoin-abe-master/abe.sqlite')
-conn = sqlite3.connect('/home/bvauthey/bitcrime/abe.sqlite')
+#conn = sqlite3.connect('/data/projects/08303-crime/bitcoin-abe-master/abe.sqlite')
+#conn = sqlite3.connect('/home/bvauthey/bitcrime/abe.sqlite')
+conn = sqlite3.connect('/data/abe.sqlite')
 req_string = 'http://api.coindesk.com/v1/bpi/historical/close.json?start={start}&end={start}'
 
 c = conn.cursor()
@@ -23,32 +24,37 @@ date_list = []
 money_list = []
 all_data = []
 created_money_list = False
+uuid = uuid.uuid4()
+open('bitcrime_progress' + str(uuid), 'a').close()
+open('bitcrime_results' + str(uuid), 'a').close()
 for day in rrule.rrule(rrule.WEEKLY, dtstart=start_date, until=end_date):
     date_list.append(day)
     week_row = []
     for i in range(0,101):
         if not created_money_list:
             money_list.append(i*100)
-        money_start = i*100
-        money_end = i*100+99
+        money_start = i*100.0
+        money_end = i*100.0+99
         print(req_string.format(start=day.strftime("%Y-%m-%d"), end=day.strftime("%Y-%m-%d")))
         response =  urllib2.urlopen(req_string.format(start=day.strftime("%Y-%m-%d"), end=day.strftime("%Y-%m-%d")))
         html = response.read()
         values = json.loads(html)
 
         BTCUSD = values['bpi'][day.strftime("%Y-%m-%d")]
+        print(BTCUSD)
 
 
         t0 = time.mktime(day.timetuple())
         t1 = time.mktime((day + timedelta(days=7)).timetuple())
-        QUERY = """SELECT COUNT(*) FROM txout_detail2 WHERE block_nTime >= {t0}
-        AND block_nTime <= {t1} AND txout_value >= {v0}
-        AND txout_value <= {v1};""".format(v0=100000000*money_start/BTCUSD, v1=100000000*money_end/BTCUSD, t0=t0, t1=t1)
-        print(QUERY)
+        QUERY = """SELECT COUNT(*) FROM txout_detail2 WHERE (block_nTime BETWEEN {t0}
+        AND {t1}) AND (txout_value BETWEEN {v0}
+        AND {v1});""".format(v0=100000000*money_start*BTCUSD, v1=100000000*money_end*BTCUSD, t0=t0, t1=t1)
+        with open('bitcrime_progress' + str(uuid), 'a') as f:
+            f.write(QUERY)
         for row in c.execute(QUERY):
             week_row.append(row[0])
             print(row)
-    with open('bitcrime_results' + uuid.uuid4()) as f:
+    with open('bitcrime_results' + str(uuid), 'a') as f:
         f.write(','.join(week_row))
 	f.write('\n')
     created_money_list = True
