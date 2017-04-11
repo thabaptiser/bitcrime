@@ -60,6 +60,7 @@ for day in rrule.rrule(rrule.WEEKLY, dtstart=start_date, until=end_date):
     created_money_list = True
     all_data.append(week_row)
 
+
 z = all_data
 x = date_list
 y = money_list
